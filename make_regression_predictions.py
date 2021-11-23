@@ -2,8 +2,10 @@
 
 import numpy as np
 
+import sklearn
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing   import PolynomialFeatures, StandardScaler
+from sklearn.model_selection import RepeatedKFold
 
 from train_lasso_model import train_lasso_model
 from train_OLS_model import train_OLS_model
@@ -23,8 +25,13 @@ max_order = 3
 # Set random_state so that each model candidate uses the same folds
 random_state = 2
 
-# Select R2 as scoring metric
-scoring = 'r2'
+# Select neg_mean_squared_error as scoring metric. 
+# A negative value is used as the scoring API in sklearn attempts to maximise the given metric
+# This will be converted to a positive sqrt value before printing
+scoring = 'neg_mean_squared_error'
+
+#Testing Strategy: Repeated K-fold validation k=5 repeats=5
+rkf = RepeatedKFold(n_splits=5, n_repeats=5, random_state=random_state) 
 
 # Split data into training and test data (3:1 ratio)
 X_known_train_split , X_known_test_split, y_known_train_split, y_known_test_split = train_test_split(
@@ -33,7 +40,7 @@ X_known_train_split , X_known_test_split, y_known_train_split, y_known_test_spli
 
 # select and train OLS model
 OLS_model_results = train_OLS_model(combo.possible_combinations, X_known_train_split, y_known_train_split, X_known_test_split, y_known_test_split, 
-                        scoring, max_order, random_state)
+                        rkf, scoring, max_order)
 
 OLS_estimator = OLS_model_results["estimator"]
 OLS_estimator_test_score = OLS_model_results["test_score"]
@@ -43,7 +50,7 @@ OLS_estimator_order = OLS_model_results["order"]
 
 # select and train lasso model
 lasso_model_results = train_lasso_model(combo.possible_combinations, X_known_train_split, y_known_train_split, X_known_test_split, y_known_test_split, 
-                        scoring, max_order, random_state)
+                        rkf, scoring, max_order)
 
 lasso_estimator = lasso_model_results["estimator"]
 lasso_estimator_test_score = lasso_model_results["test_score"]
@@ -56,8 +63,8 @@ lasso_estimator_alpha = lasso_model_results["alpha"]
 # Output best models for OLS and Lasso
 
 print("\n\nBest Results for OLS and Lasso:\n")
-print("\nOLS Best model: features: ", OLS_estimator_features, ", subset = ", OLS_estimator_subset, ",  order = ", OLS_estimator_order, ", testscore = ", OLS_estimator_test_score)
-print("\nLasso Best model: features: ", lasso_estimator_features, ", alpha = ",  lasso_estimator_alpha, ",  order = ", lasso_estimator_order, ", testscore = ", lasso_estimator_test_score)
+print("\nOLS Best model: features: ", OLS_estimator_features, ", subset = ", OLS_estimator_subset, ",  order = ", OLS_estimator_order, ", testscore = ", np.sqrt(abs(OLS_estimator_test_score)))
+print("\nLasso Best model: features: ", lasso_estimator_features, ", alpha = ",  lasso_estimator_alpha, ",  order = ", lasso_estimator_order, ", testscore = ", np.sqrt(abs(lasso_estimator_test_score)))
 
 # compare results
 

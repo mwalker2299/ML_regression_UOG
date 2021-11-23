@@ -7,7 +7,7 @@ import seaborn as sns
 from sklearn.metrics import get_scorer
 from sklearn.linear_model import Lasso
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
-from sklearn.model_selection import RepeatedKFold, cross_validate
+from sklearn.model_selection import cross_validate
 from operator import itemgetter
 
 import warnings
@@ -16,19 +16,19 @@ import warnings
 # This line prevents these warnings from cluttering the output
 warnings.filterwarnings("ignore")
 
-#Plot the test, validation and training r2 scores against the range of alpha values
+#Plot the test, validation and training MSE scores against the range of alpha values
 def plot_alpha_grid(
-    validation_score, train_score, alphas_to_try, chosen_alpha,
+    validation_score, train_score, alphas_grid, chosen_alpha,
     scoring, test_score = None, filename = None):
     
     plt.figure(figsize = (8,8))
-    sns.lineplot(y = validation_score, x = alphas_to_try, 
+    sns.lineplot(y = validation_score, x = alphas_grid, 
                  label = 'validation_data')
-    sns.lineplot(y = train_score, x = alphas_to_try, 
+    sns.lineplot(y = train_score, x = alphas_grid, 
                  label = 'training_data')
     plt.axvline(x=chosen_alpha, linestyle='--')
     if test_score is not None:
-        sns.lineplot(y = test_score, x = alphas_to_try, 
+        sns.lineplot(y = test_score, x = alphas_grid, 
                      label = 'test_data')
     plt.xlabel('alpha_parameter')
     plt.ylabel(scoring)
@@ -37,8 +37,8 @@ def plot_alpha_grid(
     if filename is not None:
         plt.savefig(str(filename) + ".png")
 
-# Perform repeated cross-validation to find the alpha value which produces the highest average r2 score 
-def find_optimum_alpha(potential_alphas, X_train, y_train, X_test, y_test, cv, scoring = 'r2', draw_plot = True, filename = None):
+# Perform repeated cross-validation to find the alpha value which produces the highest average MSE score 
+def find_optimum_alpha(potential_alphas, X_train, y_train, X_test, y_test, cv, scoring = 'neg_mean_squared_error', draw_plot = True, filename = None):
     
     validation_scores = []
     train_scores = []
@@ -53,7 +53,7 @@ def find_optimum_alpha(potential_alphas, X_train, y_train, X_test, y_test, cv, s
     # For each alpha in the given range, perform CV
     for current_alpha in potential_alphas:
 
-      regmodel = Lasso(alpha=current_alpha, max_iter=10000)
+      regmodel = Lasso(alpha=current_alpha, max_iter=1000)
         
       results = cross_validate(
           regmodel, X_train, y_train, scoring=scoring, cv=cv, return_estimator=True, return_train_score=True)
@@ -63,8 +63,8 @@ def find_optimum_alpha(potential_alphas, X_train, y_train, X_test, y_test, cv, s
       train_scores.append(np.mean(results['train_score']))
 
       if X_test is not None:
-            regmodel.fit(X_train,y_train)
-            test_scores.append(scorer(regmodel, X_test, y_test))
+          regmodel.fit(X_train,y_train)
+          test_scores.append(scorer(regmodel, X_test, y_test))
 
     
     optimum_alpha = potential_alphas[np.argmax(validation_scores)]
@@ -87,7 +87,7 @@ def find_optimum_alpha(potential_alphas, X_train, y_train, X_test, y_test, cv, s
 # For each possible feature combination (defined in testing_combos.py),
 # 
 def find_optimum_model(feature_combos, X_train, y_train, X_test, y_test,
-                   cv, scoring = 'r2', max_order=3):
+                   cv, scoring = 'neg_mean_squared_error', max_order=3):
 
   results_list = []
   combo_counter = 0
@@ -118,15 +118,15 @@ def find_optimum_model(feature_combos, X_train, y_train, X_test, y_test,
       X_test_combo_poly_scaled  = scaler.transform(X_test_combo_ploy)
 
       ## start with a grid search with low level granularity and then refine.
-      alpha_grid = np.linspace(0,100,101)
+      alpha_grid = np.linspace(-5,5,101)
       optimum_alpha, optimum_alpha_validation_score, estimator, test_score_at_optimum_alpha = find_optimum_alpha(alpha_grid, 
                                                                         X_train_combo_poly_scaled, y_train, X_test_combo_poly_scaled, y_test, 
                                                                         cv=cv, scoring=scoring, draw_plot=True, filename='plots/combo'+str(combo_counter)+'_P'+str(i)+'_R'+str(0))
 
       # Perform search again around optimum alpha at increased granularity
-      # (The initial search will narrow the alpha down to an int between 0 and 100
-      #  So the second search is conducted around this int.
-      alpha_grid = np.linspace(optimum_alpha-1, optimum_alpha+1, 1000)
+      #  The first search has a granularity of 1/10, 
+      # so the second serach is bounded to +-1/10 of the initial alpha
+      alpha_grid = np.linspace(optimum_alpha-0.1, optimum_alpha+0.1, 100)
       optimum_alpha, optimum_alpha_validation_score, estimator, test_score_at_optimum_alpha = find_optimum_alpha(alpha_grid, 
                                                                         X_train_combo_poly_scaled, y_train, X_test_combo_poly_scaled, y_test,
                                                                         cv=cv, scoring=scoring, draw_plot=True, filename='plots/combo'+str(combo_counter)+'_P'+str(i)+'_R'+str(1))
@@ -143,25 +143,22 @@ def find_optimum_model(feature_combos, X_train, y_train, X_test, y_test,
 
       results_list.append(results)
 
-  # Sort results based on best test data score
-  sorted_results = sorted(results_list, key=itemgetter('test_score'))
+  # Sort results based on best validation data score
+  sorted_results = sorted(results_list, key=itemgetter('validation_score'))
 
 
   return sorted_results
 
 # Selects and trains the optimum Lasso model.
 # Examines all defined features combos at poly powers 1,2 and 3
-def train_lasso_model (feature_combos, X_train, y_train, X_test, y_test, scoring, max_order, random_state):
-
-  #Testing Strategy: Repeated K-fold validation k=5 repeats=5
-  rkf = RepeatedKFold(n_splits=5, n_repeats=5, random_state=random_state) 
+def train_lasso_model (feature_combos, X_train, y_train, X_test, y_test, cv, scoring, max_order):
 
   results = find_optimum_model(feature_combos, X_train, y_train, X_test, y_test,
-              cv=rkf, scoring=scoring, max_order=max_order)
+              cv=cv, scoring=scoring, max_order=max_order)
 
   print("\n\n Lasso results:\n")
   for result in results:
-    print("features: ", result["features"], ",  order: ", result["order"], ", validation score: ", result["validation_score"], ",  test_score: ", result["test_score"], ", alpha: ", result["alpha"])
+    print("features: ", result["features"], ",  order: ", result["order"], ", validation score: ", np.sqrt(abs(result["validation_score"])), ",  test_score: ", np.sqrt(abs(result["test_score"])), ", alpha: ", result["alpha"])
 
-  # Retrieve estimator with optimum test score.
+  # Retrieve estimator with optimum score.
   return results[-1]

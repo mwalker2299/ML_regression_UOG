@@ -2,7 +2,6 @@
 
 import numpy as np
 
-
 def base_features(X):
   return X
 
@@ -149,7 +148,7 @@ def average_channels_and_cycle_time_to_clock_speed(X):
 
 #   return np.hstack((clock_speed, ratio, min_channels, max_channels))
 
-## Ratio combinations were removed as they consistently produced poor predictions.
+## Ratio combos were removed as they consistently provided poor predictions
 
 possible_combinations = {tuple(['MYCT','MMIN','MMAX','CACH','CHMIN','CHMAX']):base_features, 
                         tuple(['MYCT','MAVG','CACH','CHMIN','CHMAX']):average_memory, 

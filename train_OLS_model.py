@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.metrics import get_scorer
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
-from sklearn.model_selection import RepeatedKFold, cross_validate
+from sklearn.model_selection import cross_validate
 from itertools import chain, combinations
 from operator import itemgetter
 
@@ -21,7 +21,7 @@ def powerset(iterable):
     return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
 
 
-def find_optimum_model(feature_combos, X_train, y_train, cv, scoring = 'r2', max_order=3):
+def find_optimum_model(feature_combos, X_train, y_train, cv, scoring = 'neg_mean_squared_error', max_order=3):
     
   results_list = []
   combo_counter = 0
@@ -81,16 +81,13 @@ def find_optimum_model(feature_combos, X_train, y_train, cv, scoring = 'r2', max
 
 # Selects and trains the optimum Lasso model.
 # Examines every subset of all defined features combos at poly powers 1,2 and 3
-def train_OLS_model (feature_combos, X_train,y_train, X_test, y_test, scoring, max_order, random_state):
+def train_OLS_model (feature_combos, X_train,y_train, X_test, y_test, cv, scoring, max_order):
 
-  #Testing Strategy: Repeated K-fold validation k=5 repeats=5
-  rkf = RepeatedKFold(n_splits=5, n_repeats=5, random_state=random_state) 
-
-  results = find_optimum_model(feature_combos, X_train, y_train, cv=rkf, scoring=scoring, max_order=max_order)
+  results = find_optimum_model(feature_combos, X_train, y_train, cv=cv, scoring=scoring, max_order=max_order)
 
   print("\n\n OLS results:\n")
   for result in results:
-    print("features: ", result["features"][result["subset"]], ",  order: ", result["order"], ", validation score: ", result["validation_score"])
+    print("features: ", result["features"][result["subset"]], ",  order: ", result["order"], ", validation score: ", np.sqrt(abs(result["validation_score"])))
 
   # Retrieve estimator with optimum test score.
   best_model_results = results[-1]
